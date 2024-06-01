@@ -264,6 +264,11 @@ int main(int argc, char **argv) {
     TEST_AND_EXIT_ERRNO(sigaction(SIGINT, &sigact, NULL) == -1, "Error installing signal handler for INT");
     PRINT_DEBUG((stderr, "INT handler successfully installed\n"));
 
+    while (true)
+    {
+        printf("Val: %d\n", vmem->pt[0].flags);
+    }   
+
     // Server Loop, waiting for commands from vmapp
     while(1) {
 		struct msg m = waitForMsg();
@@ -372,6 +377,10 @@ void dump_pt(void) {
 /* Your code goes here... */
 
 void cleanup(void) {
+    // distory shared memory 
+	TEST_AND_EXIT_ERRNO(-1 ==  shmctl(shm_id, IPC_RMID, NULL), "shmctl failed"); // Mark vmem for deletion 
+	TEST_AND_EXIT_ERRNO(-1 == shmdt(vmem), "shmdt failed"); // detach shared memory
+	PRINT_DEBUG((stderr, "Shared memory successfully detached\n"));
 }
 
 void vmem_init(void) {
@@ -379,8 +388,22 @@ void vmem_init(void) {
     /* Create System V shared memory */
 
     /* We are creating the shm, so set the IPC_CREAT flag */
-
+	key_t shm_key = ftok(SHMKEY, SHMPROCID);
+	TEST_AND_EXIT_ERRNO(shm_key == -1, "ftok failed!");
+	shm_id = shmget(shm_key, sizeof(struct vmem_struct), 0664 | IPC_CREAT);
+	
+	if (shm_id == -1){
+		fprintf(stderr, "Shared memory from old run might still exists\n");
+		fprintf(stderr, "   Use ipcs -ma for checking shared memory ressources\n");
+		fprintf(stderr, "   Use ipcrm for deleting shared memory ressources\n");
+	}
+	
     /* Attach shared memory to vmem (virtual memory) */
+	TEST_AND_EXIT_ERRNO(shm_id == -1, "shmget failed!");
+	PRINT_DEBUG((stderr, "shmget successfuly allocated %lu bytes\n", sizeof(struct msg)));
+	vmem = (struct vmem_struct *) shmat(shm_id, NULL, 0);
+	TEST_AND_EXIT_ERRNO(vmem == (struct vmem_struct *) -1, "Error attaching shared memory");
+	PRINT_DEBUG((stderr, "Shared memory successfuly attached\n"));
 
     /* Fill with zeros */
     memset(vmem, 0, SHMSIZE);

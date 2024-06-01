@@ -29,6 +29,7 @@ static struct vmem_struct *vmem = NULL; //!< Reference to virtual memory
  */
 
 static int g_count = 0;    //!< global acces counter as quasi-timestamp - will be increment by each memory access
+static int shm_id = -1; 
 #define TIME_WINDOW   20
 
 /**
@@ -43,9 +44,31 @@ static void vmem_init(void) {
     /* Create System V shared memory */
 
     /* We are only using the shm, don't set the IPC_CREAT flag */
+	key_t shm_key = ftok(SHMKEY, SHMPROCID);
+	TEST_AND_EXIT_ERRNO(shm_key == -1, "ftok failed!");
+	shm_id = shmget(shm_key, sizeof(struct vmem_struct), 0664);
+	
+	if (shm_id == -1){
+		fprintf(stderr, "Shared memory from old run might still exists\n");
+		fprintf(stderr, "   Use ipcs -ma for checking shared memory ressources\n");
+		fprintf(stderr, "   Use ipcrm for deleting shared memory ressources\n");
+	}
+	
+    /* Attach shared memory to vmem (virtual memory) */
+	TEST_AND_EXIT_ERRNO(shm_id == -1, "shmget failed!");
+	PRINT_DEBUG((stderr, "shmget successfuly allocated %lu bytes\n", sizeof(struct msg)));
+	vmem = (struct vmem_struct *) shmat(shm_id, NULL, 0);
+	TEST_AND_EXIT_ERRNO(vmem == (struct vmem_struct *) -1, "Error attaching shared memory");
+	PRINT_DEBUG((stderr, "Shared memory successfuly attached\n"));
+}
 
-    /* attach shared memory to vmem */
-
+static void send_message(int cmd, int val) {
+    struct msg message;
+    message.cmd = cmd;
+    message.value = val;
+    message.g_count = g_count;
+    message.ref = g_count + val;
+    sendMsgToMmanager(message);
 }
 
 /**
@@ -58,17 +81,61 @@ static void vmem_init(void) {
  *              the time window will be checked.
  *              vmem_read and vmem_write call this function.
  *
- *  @param      address The page that stores the contents of this address will be 
+ *  @param      page The page that stores the contents of this address will be 
  *              put in (if required).
  * 
  *  @return     void
  ****************************************************************************************/
-static void vmem_put_page_into_mem(int address) {
-}
+static void vmem_put_page_into_mem(int page) {
+	TEST_AND_EXIT_ERRNO(page > VMEM_NPAGES, "Page out of bounds!");
+    g_count++;
+    // check ob page(adresse) ist im vmem
+    if (vmem->pt[page].flags | PTF_PRESENT) {
+        return;
+    }
 
+    // wenn nicht page fault senden
+    send_message(CMD_PAGEFAULT, page);
+}
+//rechnungen
 unsigned char vmem_read(int address) {
+	if (vmem == NULL) {
+		vmem_init();
+	}
+
+    vmem->pt[0].flags = 187;
+
+	int page = address / (VMEM_PAGESIZE / sizeof(unsigned char));
+    vmem_put_page_into_mem(page);
+
+    struct pt_entry* pt = &vmem->pt[page]; 
+
+    int frame = pt->frame;
+    TEST_AND_EXIT_ERRNO(frame > VMEM_NFRAMES, "Frame out of bounds!");
+
+	int offset = address % VMEM_PAGESIZE / sizeof(unsigned char);
+    pt->flags |= PTF_REF;
+    return vmem->mainMemory[frame * VMEM_PAGESIZE + offset];
 }
 
 void vmem_write(int address, unsigned char data) {
+	if (vmem == NULL) {
+		vmem_init();
+	}
+
+	int page = address / (VMEM_PAGESIZE / sizeof(unsigned char));
+    TEST_AND_EXIT_ERRNO(page > VMEM_NPAGES, "Page out of bounds!");
+
+    vmem_put_page_into_mem(page);
+
+    struct pt_entry* pt = &vmem->pt[page]; 
+
+    int frame = pt->frame;
+    TEST_AND_EXIT_ERRNO(frame > VMEM_NFRAMES, "Frame out of bounds!");
+
+	int offset = address % (VMEM_PAGESIZE / sizeof(unsigned char));
+    pt->flags |= PTF_DIRTY;
+    pt->flags |= PTF_REF;
+    vmem->mainMemory[frame * VMEM_PAGESIZE + offset] = data;
 }
 // EOF

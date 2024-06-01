@@ -36,9 +36,9 @@
 /**
  * page table flags used by this simulation
  */
-#define PTF_PRESENT     1
-#define PTF_DIRTY       2 //!< store: need to write 
-#define PTF_REF         4       
+#define PTF_PRESENT     1	// 0001
+#define PTF_DIRTY       2 	// 0010	//!< store: need to write 
+#define PTF_REF         4   // 0100 
 
 #define VOID_IDX -1       //!< Constant for invalid page or frame reference 
 
@@ -50,6 +50,7 @@ struct pt_entry {
 	int frame;             //!< Frame idx; frame == VOID_IDX: unvalid reference  
 };
 
+// physischer speicher
 /**
  * The data structure stored in shared memory
  */
