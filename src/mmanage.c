@@ -44,7 +44,7 @@
  * 
  *  @return     void 
  ****************************************************************************************/
-static void fetch_page_from_disk(int page, int frame);
+
 
 /**
  *****************************************************************************************
@@ -55,7 +55,7 @@ static void fetch_page_from_disk(int page, int frame);
  * 
  *  @return     void 
  ****************************************************************************************/
-static void remove_page_from_memory(int page);
+
 
 /**
  *****************************************************************************************
@@ -208,6 +208,8 @@ static void scan_params(int argc, char **argv);
  ****************************************************************************************/
 static void print_usage_info_and_exit(char *err_str, char * programName);
 
+void init_linked_list();
+
 /*
  * variables for memory management
  */
@@ -228,50 +230,61 @@ struct age {
 
 struct age age[VMEM_NFRAMES];
 
+bool is_used[VMEM_NFRAMES] = {false};
+
+int frame_counter = 0;
+
 static struct vmem_struct *vmem = NULL; //!< Reference to shared memory
 
 int main(int argc, char **argv) {
+
     struct sigaction sigact;
+    init_linked_list();
     init_pagefile(); // init page file
     open_logger();   // open logfile
 
     // Setup IPC for sending commands from vmapp to mmanager
     setupSyncDataExchange();
 
+
     // Create shared memory and init vmem structure 
     vmem_init();
     TEST_AND_EXIT_ERRNO(!vmem, "Error initialising vmem");
     PRINT_DEBUG((stderr, "vmem successfully created\n"));
+    printf("main 3\n");
 
     // init aging info
     for(int i = 0; i < VMEM_NFRAMES; i++) {
        age[i].page = VOID_IDX;
        age[i].age = 0;
     }
+    printf("main 4\n");
 
     // scan parameter 
     pageRepAlgo = find_remove_fifo;
     scan_params(argc, argv);
+    
+    printf("main 5\n");
 
     /* Setup signal handler */
     sigact.sa_handler = sighandler;
     sigemptyset(&sigact.sa_mask);
     sigact.sa_flags = SA_RESTART; // damit mq_receive man eine signal neu gestartet wird
+    
+    printf("main 6\n");
 
     TEST_AND_EXIT_ERRNO(sigaction(SIGUSR2, &sigact, NULL) == -1, "Error installing signal handler for USR2");
     PRINT_DEBUG((stderr,  "USR2 handler successfully installed\n"));
 
     TEST_AND_EXIT_ERRNO(sigaction(SIGINT, &sigact, NULL) == -1, "Error installing signal handler for INT");
     PRINT_DEBUG((stderr, "INT handler successfully installed\n"));
-
-    while (true)
-    {
-        printf("Val: %d\n", vmem->pt[0].flags);
-    }   
+    
+    printf("main 7\n");
 
     // Server Loop, waiting for commands from vmapp
     while(1) {
 		struct msg m = waitForMsg();
+        //printf("\n\n\n\n\naaaaaaaaa\nm.cmd: %d\n", m.cmd);
         switch(m.cmd){
 			case CMD_PAGEFAULT:
 				allocate_page(m.value, m.g_count);
@@ -284,6 +297,7 @@ int main(int argc, char **argv) {
 			default:
 				TEST_AND_EXIT(true, (stderr, "Unexpected command received from vmapp\n"));
         }
+        printf("send ack\n");
         sendAck();
     }
     return 0;
@@ -308,11 +322,13 @@ void scan_params(int argc, char **argv) {
             // page replacement strategies clock selected 
             pageRepAlgo = find_remove_clock;
             param_ok = true;
+            exit(0);
         }
         if (0 == strcasecmp("-aging", argv[i])) {
             // page replacement strategies aging selected 
             pageRepAlgo = find_remove_aging;
             param_ok = true;
+            exit(0);
         }
         if (!param_ok) print_usage_info_and_exit("Undefined parameter.\n", programName); // undefined parameter found
     } // for loop
@@ -409,23 +425,81 @@ void vmem_init(void) {
     memset(vmem, 0, SHMSIZE);
 }
 
+//VOID_IDX wird returned fall kein unused frame da
 int find_unused_frame() {
+    printf("find_unused_frame\n");
+    for(int i = 0; i < VMEM_NFRAMES; i++) {
+        if (!is_used[i]) {
+            return i;
+        }
+    }
+
+    return VOID_IDX;
+}
+
+static struct Node {
+    struct Node* next;
+    int page;
+};
+
+static struct Linked_list {
+    struct Node* start;
+    struct Node* end;
+}linked_list;
+
+void linked_list_add_node(int page) {
+    
+    struct Node* newNode = malloc(sizeof(struct Node));
+
+    if (linked_list.end != NULL) {
+        linked_list.end->next = newNode;
+    }
+    linked_list.end = newNode;
+    
+    if (linked_list.start == NULL) {
+        linked_list.start = newNode;
+    }
+
+    newNode->next = NULL;
+    newNode->page = page;
+}
+
+void init_linked_list(){
+    linked_list.start = NULL;
+    linked_list.end = NULL;
+}
+
+void linked_list_remove_first() {
+    if (linked_list.start != NULL) {
+        struct Node* alter_start = linked_list.start;
+        linked_list.start = alter_start->next;
+
+        free(alter_start);
+    }
 }
 
 void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualiesieren und neue page in vmem laden
+    pf_count++;
     int frame = find_unused_frame();//VOID_IDX wird returned fall kein unused frame da
+    printf("frame %d \n", frame);
     int removedPage = VOID_IDX; 
     if (frame == VOID_IDX) {
-        pageRepAlgo(req_page, &removedPage, &frame)
-        vmem->pt[removedPage]->flags = false;
-        vmem->pt[req_page]->frame = VOID_IDX;
+        printf("a pagerepalgo: 0x%llX\n", pageRepAlgo);
+        pageRepAlgo(req_page, &removedPage, &frame);
+        vmem->pt[removedPage].flags = false;
+        vmem->pt[removedPage].frame = VOID_IDX;
     } else {
-        fetch_page_from_disk(req_page, frame);
+        //printf("req_page: %d, frame: %d\n", req_page, frame);
+        fetch_page_from_pagefile(req_page, &vmem->mainMemory[frame * VMEM_PAGESIZE]);
+        is_used[frame] = true;
     }
-    //need to update page table
-    vmem->pt[req_page]->flags = PTF_PRESENT; //-> ??
-    vmem->pt[req_page]->frame = frame;
 
+    linked_list_add_node(req_page);
+
+    //need to update page table
+    vmem->pt[req_page].flags = PTF_PRESENT;
+    vmem->pt[req_page].frame = frame;
+    
     struct logevent le;
     /* Log action */
     le.req_pageno = req_page;
@@ -434,25 +508,38 @@ void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualie
     le.g_count = g_count; 
     le.pf_count = pf_count;
     logger(le);
-    pf_count++; //adding pagefaul counter
+    printf("fertig\n");
 }
 
-void fetch_page_from_disk(int page, int frame){
-}
 
-void remove_page_from_memory(int page){
-}
 
-void find_remove_fifo(int page, int * removedPage, int *frame){
+void find_remove_fifo(int page, int *removedPage, int *frame) {
+    
+    *removedPage = linked_list.start->page;
+    linked_list_remove_first();
+    printf("a *removedPage: %d\n", *removedPage);
+
+    *frame = vmem->pt[*removedPage].frame;
+
+    if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
+        printf("1\n");
+        store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
+        //printf("1a\n");
+    }
+    
+    fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
 }
 
 static void find_remove_clock(int page, int * removedPage, int *frame){
+    printf("clock\n");
 }
 
 static void find_remove_aging(int page, int * removedPage, int *frame){
+    printf("remove\n");
 }
 
 static void update_age_reset_ref(void){
+    printf("age\n");
 } 
 
 // EOF

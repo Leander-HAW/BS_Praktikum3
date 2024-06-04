@@ -167,6 +167,7 @@ void scan_params(int argc, char **argv) {
 
 int main(int argc, char **argv) {
     // scan parameter 
+    //printf("main app\n");
 
     program_name = argv[0];
     scan_params(argc, argv);

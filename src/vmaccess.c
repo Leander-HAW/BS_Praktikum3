@@ -41,6 +41,7 @@ static int shm_id = -1;
  ****************************************************************************************/
 static void vmem_init(void) {
 
+    //printf("vmem_init\n");
     /* Create System V shared memory */
 
     /* We are only using the shm, don't set the IPC_CREAT flag */
@@ -63,6 +64,7 @@ static void vmem_init(void) {
 }
 
 static void send_message(int cmd, int val) {
+    //printf("sending msg: %d, val: %d\n", cmd, val);
     struct msg message;
     message.cmd = cmd;
     message.value = val;
@@ -88,9 +90,8 @@ static void send_message(int cmd, int val) {
  ****************************************************************************************/
 static void vmem_put_page_into_mem(int page) {
 	TEST_AND_EXIT_ERRNO(page > VMEM_NPAGES, "Page out of bounds!");
-    g_count++;
     // check ob page(adresse) ist im vmem
-    if (vmem->pt[page].flags | PTF_PRESENT) {
+    if (vmem->pt[page].flags & PTF_PRESENT) {
         return;
     }
 
@@ -103,10 +104,11 @@ unsigned char vmem_read(int address) {
 		vmem_init();
 	}
 
-    vmem->pt[0].flags = 187;//?
 
 	int page = address / (VMEM_PAGESIZE / sizeof(unsigned char));
     vmem_put_page_into_mem(page);
+    
+    g_count++;
 
     struct pt_entry* pt = &vmem->pt[page];
 
@@ -115,6 +117,8 @@ unsigned char vmem_read(int address) {
 
 	int offset = address % VMEM_PAGESIZE / sizeof(unsigned char);
     pt->flags |= PTF_REF;
+    
+    //printf("vmem read %d %d \n", &vmem->pt[page], vmem->pt[page]);
     return vmem->mainMemory[frame * VMEM_PAGESIZE + offset];
 }
 
@@ -123,10 +127,14 @@ void vmem_write(int address, unsigned char data) {
 		vmem_init();
 	}
 
+    //printf("vmem read\n");
+
 	int page = address / (VMEM_PAGESIZE / sizeof(unsigned char));
     TEST_AND_EXIT_ERRNO(page > VMEM_NPAGES, "Page out of bounds!");
 
     vmem_put_page_into_mem(page);
+    
+    g_count++;
 
     struct pt_entry* pt = &vmem->pt[page]; 
 

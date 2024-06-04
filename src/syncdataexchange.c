@@ -110,6 +110,7 @@ void sendMsgToMmanager(struct msg msg){
 		// Erster Aufruf durch den Client
 		TEST_AND_EXIT(((shm_id != -1) || (sharedData != NULL) || (wakeupMManager != SEM_FAILED) || (wakeupVmApp != SEM_FAILED)), 
 					 (stderr, "sendMsgToMmanager:Internal error detected\n"));
+		printf("setting up sync data exchange\n");
 		setupSyncDataExchangeInternal(false);
 	} // end if erzeuge Kommunikationstrukturen
 	// Uebertrage Daten an den Server
