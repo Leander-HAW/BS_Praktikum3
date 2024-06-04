@@ -412,11 +412,21 @@ void vmem_init(void) {
 int find_unused_frame() {
 }
 
-void allocate_page(const int req_page, const int g_count) {
-    int frame = VOID_IDX;
-    int removedPage = VOID_IDX;
-    struct logevent le;
+void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualiesieren und neue page in vmem laden
+    int frame = find_unused_frame();//VOID_IDX wird returned fall kein unused frame da
+    int removedPage = VOID_IDX; 
+    if (frame == VOID_IDX) {
+        pageRepAlgo(req_page, &removedPage, &frame)
+        vmem->pt[removedPage]->flags = false;
+        vmem->pt[req_page]->frame = VOID_IDX;
+    } else {
+        fetch_page_from_disk(req_page, frame);
+    }
+    //need to update page table
+    vmem->pt[req_page]->flags = PTF_PRESENT; //-> ??
+    vmem->pt[req_page]->frame = frame;
 
+    struct logevent le;
     /* Log action */
     le.req_pageno = req_page;
     le.replaced_page = removedPage;
@@ -424,6 +434,7 @@ void allocate_page(const int req_page, const int g_count) {
     le.g_count = g_count; 
     le.pf_count = pf_count;
     logger(le);
+    pf_count++; //adding pagefaul counter
 }
 
 void fetch_page_from_disk(int page, int frame){

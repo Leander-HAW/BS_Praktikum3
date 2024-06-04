@@ -103,12 +103,12 @@ unsigned char vmem_read(int address) {
 		vmem_init();
 	}
 
-    vmem->pt[0].flags = 187;
+    vmem->pt[0].flags = 187;//?
 
 	int page = address / (VMEM_PAGESIZE / sizeof(unsigned char));
     vmem_put_page_into_mem(page);
 
-    struct pt_entry* pt = &vmem->pt[page]; 
+    struct pt_entry* pt = &vmem->pt[page];
 
     int frame = pt->frame;
     TEST_AND_EXIT_ERRNO(frame > VMEM_NFRAMES, "Frame out of bounds!");
