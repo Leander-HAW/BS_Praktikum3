@@ -15,7 +15,8 @@ seed_values="2806"
 #seed_values="2807"
 
 page_sizes="8 16 32 64"
-page_rep_algo="FIFO CLOCK AGING"
+#page_rep_algo="FIFO CLOCK AGING"
+page_rep_algo="AGING"
 search_algo="quicksort"
 search_algo="quicksort bubblesort"
 

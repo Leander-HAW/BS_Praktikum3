@@ -1,5 +1,4 @@
 seed = 2806 sort algorithm = Quick Sort
-setting up sync data exchange
 
 Unsorted:
        247        100        205        130        147        208        201        206

@@ -21,6 +21,7 @@
 #include <string.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <stdint.h>
 
 #include "mmanage.h"
 #include "debug.h"
@@ -228,11 +229,14 @@ struct age {
    int page;           //!< page belonging to this entry
  };
 
+
 struct age age[VMEM_NFRAMES];
 
-bool is_used[VMEM_NFRAMES] = {false};
+static bool is_used[VMEM_NFRAMES] = {false};
 
-int frame_counter = 0;
+static uint8_t age_counter[VMEM_NFRAMES] = {0};
+
+static int frame_counter = 0;
 
 static struct vmem_struct *vmem = NULL; //!< Reference to shared memory
 
@@ -246,40 +250,31 @@ int main(int argc, char **argv) {
     // Setup IPC for sending commands from vmapp to mmanager
     setupSyncDataExchange();
 
-
     // Create shared memory and init vmem structure 
     vmem_init();
     TEST_AND_EXIT_ERRNO(!vmem, "Error initialising vmem");
     PRINT_DEBUG((stderr, "vmem successfully created\n"));
-    printf("main 3\n");
 
     // init aging info
     for(int i = 0; i < VMEM_NFRAMES; i++) {
        age[i].page = VOID_IDX;
        age[i].age = 0;
     }
-    printf("main 4\n");
 
     // scan parameter 
     pageRepAlgo = find_remove_fifo;
     scan_params(argc, argv);
-    
-    printf("main 5\n");
 
     /* Setup signal handler */
     sigact.sa_handler = sighandler;
     sigemptyset(&sigact.sa_mask);
     sigact.sa_flags = SA_RESTART; // damit mq_receive man eine signal neu gestartet wird
-    
-    printf("main 6\n");
 
     TEST_AND_EXIT_ERRNO(sigaction(SIGUSR2, &sigact, NULL) == -1, "Error installing signal handler for USR2");
     PRINT_DEBUG((stderr,  "USR2 handler successfully installed\n"));
 
     TEST_AND_EXIT_ERRNO(sigaction(SIGINT, &sigact, NULL) == -1, "Error installing signal handler for INT");
     PRINT_DEBUG((stderr, "INT handler successfully installed\n"));
-    
-    printf("main 7\n");
 
     // Server Loop, waiting for commands from vmapp
     while(1) {
@@ -322,13 +317,11 @@ void scan_params(int argc, char **argv) {
             // page replacement strategies clock selected 
             pageRepAlgo = find_remove_clock;
             param_ok = true;
-            exit(0);
         }
         if (0 == strcasecmp("-aging", argv[i])) {
             // page replacement strategies aging selected 
             pageRepAlgo = find_remove_aging;
             param_ok = true;
-            exit(0);
         }
         if (!param_ok) print_usage_info_and_exit("Undefined parameter.\n", programName); // undefined parameter found
     } // for loop
@@ -427,7 +420,6 @@ void vmem_init(void) {
 
 //VOID_IDX wird returned fall kein unused frame da
 int find_unused_frame() {
-    printf("find_unused_frame\n");
     for(int i = 0; i < VMEM_NFRAMES; i++) {
         if (!is_used[i]) {
             return i;
@@ -484,7 +476,6 @@ void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualie
     printf("frame %d \n", frame);
     int removedPage = VOID_IDX; 
     if (frame == VOID_IDX) {
-        printf("a pagerepalgo: 0x%llX\n", pageRepAlgo);
         pageRepAlgo(req_page, &removedPage, &frame);
         vmem->pt[removedPage].flags = false;
         vmem->pt[removedPage].frame = VOID_IDX;
@@ -493,7 +484,7 @@ void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualie
         fetch_page_from_pagefile(req_page, &vmem->mainMemory[frame * VMEM_PAGESIZE]);
         is_used[frame] = true;
     }
-
+    age_counter[frame] = 0x80;
     linked_list_add_node(req_page);
 
     //need to update page table
@@ -508,13 +499,28 @@ void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualie
     le.g_count = g_count; 
     le.pf_count = pf_count;
     logger(le);
-    printf("fertig\n");
 }
 
+int find_page_by_frame(int frame) {
+    for (int i = 0; i < VMEM_NPAGES; i++) {
+        if (vmem->pt[i].frame == frame)
+        {
+            return i;
+        }
+    }
 
+    return VOID_IDX;
+}
+
+void inc_frame_counter() {
+    frame_counter++;
+    if (frame_counter >= VMEM_NFRAMES) {
+        frame_counter = 0;
+    }
+}
 
 void find_remove_fifo(int page, int *removedPage, int *frame) {
-    
+    /*
     *removedPage = linked_list.start->page;
     linked_list_remove_first();
     printf("a *removedPage: %d\n", *removedPage);
@@ -528,18 +534,77 @@ void find_remove_fifo(int page, int *removedPage, int *frame) {
     }
     
     fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
+    */
+
+    *frame = frame_counter;
+    *removedPage = (*frame);
+
+    if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
+        printf("1\n");
+        store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
+        //printf("1a\n");
+    }
+    
+    fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
+
+    inc_frame_counter();
 }
 
 static void find_remove_clock(int page, int * removedPage, int *frame){
-    printf("clock\n");
+    while(true) {
+        int testpage = find_page_by_frame(frame_counter);
+        if (vmem->pt[testpage].flags & PTF_REF) {
+            vmem->pt[testpage].flags &= (~PTF_REF);
+            inc_frame_counter();
+        }else {
+            *removedPage = testpage;
+            break;
+        }
+    }
+    *frame = frame_counter;
+
+    if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
+        store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
+    }
+    
+    fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
+
+    inc_frame_counter();
 }
 
-static void find_remove_aging(int page, int * removedPage, int *frame){
-    printf("remove\n");
+static void find_remove_aging(int page, int * removedPage, int *frame) {   
+    // nach ältestem frame suchen 
+    uint8_t smallest_count = 0xFF;
+    for (int i = 0; i < VMEM_NFRAMES; i++) {
+        if (age_counter[i] <= smallest_count) {
+            smallest_count = age_counter[i];
+            *frame = i;
+        }
+    }
+    *removedPage = find_page_by_frame(*frame);
+
+    printf("smallest count %d, *frame %d, *removedPage %d\n", smallest_count, *frame, *removedPage);
+
+    if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
+        store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
+    }
+    
+    fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
 }
 
 static void update_age_reset_ref(void){
-    printf("age\n");
+    for (int i = 0; i < VMEM_NFRAMES; i++) {
+        age_counter[i] = (age_counter[i] >> 1);
+        int testpage = find_page_by_frame(i);
+        if (testpage == VOID_IDX) {
+            break;
+        }
+        
+        if (vmem->pt[testpage].flags & PTF_REF) {
+            vmem->pt[testpage].flags &= (~PTF_REF);
+            age_counter[i] |= (0x01 << 7);
+        }
+    }
 } 
 
 // EOF

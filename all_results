@@ -1,2 +1,1 @@
-seed =   2806 page_rep_algo =    FIFO search_algo =    quicksort pagesize =    8 pagefaults     508 global_count   21296
-seed =   2806 page_rep_algo =    FIFO search_algo =   bubblesort pagesize =    8 pagefaults   19184 global_count  523658
+seed =   2806 page_rep_algo =   AGING search_algo =    quicksort pagesize =    8 pagefaults     510 global_count   21296

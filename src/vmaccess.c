@@ -98,17 +98,23 @@ static void vmem_put_page_into_mem(int page) {
     // wenn nicht page fault senden
     send_message(CMD_PAGEFAULT, page);
 }
+
+static void inc_gcount() {
+    if ((g_count % TIME_WINDOW) == 0) {
+        send_message(CMD_TIME_INTER_VAL, g_count);
+    }
+    g_count++;
+}
 //rechnungen
 unsigned char vmem_read(int address) {
 	if (vmem == NULL) {
 		vmem_init();
 	}
 
-
 	int page = address / (VMEM_PAGESIZE / sizeof(unsigned char));
     vmem_put_page_into_mem(page);
     
-    g_count++;
+    inc_gcount();
 
     struct pt_entry* pt = &vmem->pt[page];
 
@@ -134,7 +140,7 @@ void vmem_write(int address, unsigned char data) {
 
     vmem_put_page_into_mem(page);
     
-    g_count++;
+    inc_gcount();
 
     struct pt_entry* pt = &vmem->pt[page]; 
 
