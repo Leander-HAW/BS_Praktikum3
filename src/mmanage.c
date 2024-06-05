@@ -230,7 +230,7 @@ struct age {
  };
 
 
-struct age age[VMEM_NFRAMES];
+struct age age[VMEM_NFRAMES] = {-1};
 
 static bool is_used[VMEM_NFRAMES] = {false};
 
@@ -292,7 +292,6 @@ int main(int argc, char **argv) {
 			default:
 				TEST_AND_EXIT(true, (stderr, "Unexpected command received from vmapp\n"));
         }
-        printf("send ack\n");
         sendAck();
     }
     return 0;
@@ -390,6 +389,8 @@ void cleanup(void) {
 	TEST_AND_EXIT_ERRNO(-1 ==  shmctl(shm_id, IPC_RMID, NULL), "shmctl failed"); // Mark vmem for deletion 
 	TEST_AND_EXIT_ERRNO(-1 == shmdt(vmem), "shmdt failed"); // detach shared memory
 	PRINT_DEBUG((stderr, "Shared memory successfully detached\n"));
+    destroySyncDataExchange();
+    cleanup_pagefile();
 }
 
 void vmem_init(void) {
@@ -473,7 +474,7 @@ void linked_list_remove_first() {
 void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualiesieren und neue page in vmem laden
     pf_count++;
     int frame = find_unused_frame();//VOID_IDX wird returned fall kein unused frame da
-    printf("frame %d \n", frame);
+    //printf("frame %d \n", frame);
     int removedPage = VOID_IDX; 
     if (frame == VOID_IDX) {
         pageRepAlgo(req_page, &removedPage, &frame);
@@ -484,9 +485,8 @@ void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualie
         fetch_page_from_pagefile(req_page, &vmem->mainMemory[frame * VMEM_PAGESIZE]);
         is_used[frame] = true;
     }
-    age_counter[frame] = 0x80;
-    linked_list_add_node(req_page);
-
+    age[frame].age = 0x80;
+    age[frame].page = req_page;
     //need to update page table
     vmem->pt[req_page].flags = PTF_PRESENT;
     vmem->pt[req_page].frame = frame;
@@ -520,29 +520,12 @@ void inc_frame_counter() {
 }
 
 void find_remove_fifo(int page, int *removedPage, int *frame) {
-    /*
-    *removedPage = linked_list.start->page;
-    linked_list_remove_first();
-    printf("a *removedPage: %d\n", *removedPage);
-
-    *frame = vmem->pt[*removedPage].frame;
-
-    if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
-        printf("1\n");
-        store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
-        //printf("1a\n");
-    }
-    
-    fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
-    */
 
     *frame = frame_counter;
-    *removedPage = (*frame);
+    *removedPage = find_page_by_frame(*frame);
 
     if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
-        printf("1\n");
         store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
-        //printf("1a\n");
     }
     
     fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
@@ -576,14 +559,14 @@ static void find_remove_aging(int page, int * removedPage, int *frame) {
     // nach ältestem frame suchen 
     uint8_t smallest_count = 0xFF;
     for (int i = 0; i < VMEM_NFRAMES; i++) {
-        if (age_counter[i] <= smallest_count) {
-            smallest_count = age_counter[i];
+        if (age[i].age <= smallest_count) {
+            smallest_count = age[i].age;
             *frame = i;
         }
     }
-    *removedPage = find_page_by_frame(*frame);
+    *removedPage = age[*frame].page;
 
-    printf("smallest count %d, *frame %d, *removedPage %d\n", smallest_count, *frame, *removedPage);
+    //printf("smallest count %d, *frame %d, *removedPage %d\n", smallest_count, *frame, *removedPage);
 
     if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
         store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
@@ -594,16 +577,18 @@ static void find_remove_aging(int page, int * removedPage, int *frame) {
 
 static void update_age_reset_ref(void){
     for (int i = 0; i < VMEM_NFRAMES; i++) {
-        age_counter[i] = (age_counter[i] >> 1);
-        int testpage = find_page_by_frame(i);
+        //printf("age counter %d \n", age[i].age);
+        age[i].age = (age[i].age >> 1);
+        int testpage = age[i].page;
         if (testpage == VOID_IDX) {
             break;
         }
         
         if (vmem->pt[testpage].flags & PTF_REF) {
             vmem->pt[testpage].flags &= (~PTF_REF);
-            age_counter[i] |= (0x01 << 7);
+            age[i].age |= (0x01 << 7);
         }
+        //printf("age counter\t %d \n", age[i].age);
     }
 } 
 

@@ -88,6 +88,12 @@ static void send_message(int cmd, int val) {
  * 
  *  @return     void
  ****************************************************************************************/
+static void inc_gcount() {
+    g_count++;
+    if ((g_count % TIME_WINDOW) == 0) {
+        send_message(CMD_TIME_INTER_VAL, g_count);
+    }
+}
 static void vmem_put_page_into_mem(int page) {
 	TEST_AND_EXIT_ERRNO(page > VMEM_NPAGES, "Page out of bounds!");
     // check ob page(adresse) ist im vmem
@@ -97,32 +103,26 @@ static void vmem_put_page_into_mem(int page) {
 
     // wenn nicht page fault senden
     send_message(CMD_PAGEFAULT, page);
+    vmem->pt[page].flags |= PTF_REF;
+    inc_gcount();
 }
 
-static void inc_gcount() {
-    if ((g_count % TIME_WINDOW) == 0) {
-        send_message(CMD_TIME_INTER_VAL, g_count);
-    }
-    g_count++;
-}
-//rechnungen
+
 unsigned char vmem_read(int address) {
 	if (vmem == NULL) {
 		vmem_init();
 	}
 
-	int page = address / (VMEM_PAGESIZE / sizeof(unsigned char));
+	int page = address / VMEM_PAGESIZE;
+
     vmem_put_page_into_mem(page);
-    
-    inc_gcount();
 
     struct pt_entry* pt = &vmem->pt[page];
 
     int frame = pt->frame;
     TEST_AND_EXIT_ERRNO(frame > VMEM_NFRAMES, "Frame out of bounds!");
 
-	int offset = address % VMEM_PAGESIZE / sizeof(unsigned char);
-    pt->flags |= PTF_REF;
+	int offset = address % VMEM_PAGESIZE;
     
     //printf("vmem read %d %d \n", &vmem->pt[page], vmem->pt[page]);
     return vmem->mainMemory[frame * VMEM_PAGESIZE + offset];
@@ -139,17 +139,14 @@ void vmem_write(int address, unsigned char data) {
     TEST_AND_EXIT_ERRNO(page > VMEM_NPAGES, "Page out of bounds!");
 
     vmem_put_page_into_mem(page);
-    
-    inc_gcount();
 
     struct pt_entry* pt = &vmem->pt[page]; 
 
     int frame = pt->frame;
     TEST_AND_EXIT_ERRNO(frame > VMEM_NFRAMES, "Frame out of bounds!");
 
-	int offset = address % (VMEM_PAGESIZE / sizeof(unsigned char));
     pt->flags |= PTF_DIRTY;
-    pt->flags |= PTF_REF;
+	int offset = address % (VMEM_PAGESIZE / sizeof(unsigned char));
     vmem->mainMemory[frame * VMEM_PAGESIZE + offset] = data;
 }
 // EOF
