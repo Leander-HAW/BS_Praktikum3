@@ -571,23 +571,22 @@ static void find_remove_aging(int page, int * removedPage, int *frame) {
     if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
         store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
     }
-    
     fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
 }
 
 static void update_age_reset_ref(void){
     for (int i = 0; i < VMEM_NFRAMES; i++) {
         //printf("age counter %d \n", age[i].age);
-        age[i].age = (age[i].age >> 1);
-        int testpage = age[i].page;
+        unsigned char new_age = (age[i].age >> 1);
         if (testpage == VOID_IDX) {
             break;
         }
         
-        if (vmem->pt[testpage].flags & PTF_REF) {
-            vmem->pt[testpage].flags &= (~PTF_REF);
-            age[i].age |= (0x01 << 7);
+        if (vmem->pt[age[i].page].flags & PTF_REF) {
+            vmem->pt[age[i].page].flags &= (~PTF_REF);
+            new_age |= (0x01 << 7);
         }
+        age[i].age = new_age;
         //printf("age counter\t %d \n", age[i].age);
     }
 } 
