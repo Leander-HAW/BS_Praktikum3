@@ -97,14 +97,14 @@ static void inc_gcount() {
 static void vmem_put_page_into_mem(int page) {
 	TEST_AND_EXIT_ERRNO(page > VMEM_NPAGES, "Page out of bounds!");
     // check ob page(adresse) ist im vmem
-    if (vmem->pt[page].flags & PTF_PRESENT) {
-        inc_gcount();
-        return;
+    if (!(vmem->pt[page].flags & PTF_PRESENT)) {
+        send_message(CMD_PAGEFAULT, page);
     }
 
     // wenn nicht page fault senden
-    send_message(CMD_PAGEFAULT, page);
+
     vmem->pt[page].flags |= PTF_REF;
+    vmem->pt[page].flags |= PTF_PRESENT;
     inc_gcount();
 }
 

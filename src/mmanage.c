@@ -443,10 +443,8 @@ void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualie
     }
     age[frame].age = 0x80;
     age[frame].page = req_page;
-    //need to update page table
-    vmem->pt[req_page].flags = PTF_PRESENT;
     vmem->pt[req_page].frame = frame;
-    
+
     struct logevent le;
     /* Log action */
     le.req_pageno = req_page;
@@ -512,26 +510,25 @@ static void find_remove_clock(int page, int * removedPage, int *frame){
 }
 
 static void find_remove_aging(int page, int * removedPage, int *frame) {
-    printf("\n");
+    //printf("\n");
     // nach ältestem frame suchen
-    update_age_reset_ref();
     uint8_t smallest_count = 0xFF;
     for (int i = 0; i < VMEM_NFRAMES; i++) {
-        printf("vorher: frame %d age counter\t %d \n", i, age[i].age);
+        //printf("vorher: frame %d age counter\t %d \n", i, age[i].age);
         if (age[i].age <= smallest_count) {
             smallest_count = age[i].age;
             *frame = i;
         }
     }
     *removedPage = age[*frame].page;
-    printf("smallest count %d, *frame %d, *removedPage %d\n", smallest_count, *frame, *removedPage);
+    //printf("smallest count %d, *frame %d, *removedPage %d\n", smallest_count, *frame, *removedPage);
 
     if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
         store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
     }
- //   if (pf_count == 20)
-//        while (true) {}
+
     fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
+    //while (pf_count == 25);
 }
 
 static void update_age_reset_ref(void) {
