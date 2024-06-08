@@ -1,8 +1,8 @@
-seed =   2806 page_rep_algo =   AGING search_algo =    quicksort pagesize =    8 pagefaults     792 global_count     791
-seed =   2806 page_rep_algo =   AGING search_algo =   bubblesort pagesize =    8 pagefaults   25598 global_count   25597
-seed =   2806 page_rep_algo =   AGING search_algo =    quicksort pagesize =   16 pagefaults     716 global_count     715
-seed =   2806 page_rep_algo =   AGING search_algo =   bubblesort pagesize =   16 pagefaults   16516 global_count   16515
-seed =   2806 page_rep_algo =   AGING search_algo =    quicksort pagesize =   32 pagefaults     819 global_count     818
-seed =   2806 page_rep_algo =   AGING search_algo =   bubblesort pagesize =   32 pagefaults   20316 global_count   20315
-seed =   2806 page_rep_algo =   AGING search_algo =    quicksort pagesize =   64 pagefaults    2129 global_count    2128
-seed =   2806 page_rep_algo =   AGING search_algo =   bubblesort pagesize =   64 pagefaults   18310 global_count   18309
+seed =   2806 page_rep_algo =   AGING search_algo =    quicksort pagesize =    8 pagefaults     623 global_count   21296
+seed =   2806 page_rep_algo =   AGING search_algo =   bubblesort pagesize =    8 pagefaults   18683 global_count  523658
+seed =   2806 page_rep_algo =   AGING search_algo =    quicksort pagesize =   16 pagefaults     314 global_count   21296
+seed =   2806 page_rep_algo =   AGING search_algo =   bubblesort pagesize =   16 pagefaults    9691 global_count  523658
+seed =   2806 page_rep_algo =   AGING search_algo =    quicksort pagesize =   32 pagefaults     157 global_count   21296
+seed =   2806 page_rep_algo =   AGING search_algo =   bubblesort pagesize =   32 pagefaults    4962 global_count  523658
+seed =   2806 page_rep_algo =   AGING search_algo =    quicksort pagesize =   64 pagefaults    1247 global_count   21264
+seed =   2806 page_rep_algo =   AGING search_algo =   bubblesort pagesize =   64 pagefaults    2549 global_count  523626

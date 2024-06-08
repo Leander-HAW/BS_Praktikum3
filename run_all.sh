@@ -72,7 +72,7 @@ for s in $page_sizes ; do
 					 echo "=============== COMPARE results for output_${sa}_${a}_${s}.txt =================="
 					 diff -b -w results/output_${seed}_${sa}_${a}_${s}.txt   ${ref_result_dir}/output_${seed}_${sa}_${a}_${s}.txt
 					 echo "============================================================================"
-				 fi 
+				 fi
 			done
 		done
     done

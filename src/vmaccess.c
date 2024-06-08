@@ -98,6 +98,7 @@ static void vmem_put_page_into_mem(int page) {
 	TEST_AND_EXIT_ERRNO(page > VMEM_NPAGES, "Page out of bounds!");
     // check ob page(adresse) ist im vmem
     if (vmem->pt[page].flags & PTF_PRESENT) {
+        inc_gcount();
         return;
     }
 

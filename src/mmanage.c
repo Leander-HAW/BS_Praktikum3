@@ -230,11 +230,9 @@ struct age {
  };
 
 
-struct age age[VMEM_NFRAMES] = {-1};
+struct age age[VMEM_NFRAMES];
 
 static bool is_used[VMEM_NFRAMES] = {false};
-
-static uint8_t age_counter[VMEM_NFRAMES] = {0};
 
 static int frame_counter = 0;
 
@@ -243,7 +241,6 @@ static struct vmem_struct *vmem = NULL; //!< Reference to shared memory
 int main(int argc, char **argv) {
 
     struct sigaction sigact;
-    init_linked_list();
     init_pagefile(); // init page file
     open_logger();   // open logfile
 
@@ -430,47 +427,6 @@ int find_unused_frame() {
     return VOID_IDX;
 }
 
-static struct Node {
-    struct Node* next;
-    int page;
-};
-
-static struct Linked_list {
-    struct Node* start;
-    struct Node* end;
-}linked_list;
-
-void linked_list_add_node(int page) {
-    
-    struct Node* newNode = malloc(sizeof(struct Node));
-
-    if (linked_list.end != NULL) {
-        linked_list.end->next = newNode;
-    }
-    linked_list.end = newNode;
-    
-    if (linked_list.start == NULL) {
-        linked_list.start = newNode;
-    }
-
-    newNode->next = NULL;
-    newNode->page = page;
-}
-
-void init_linked_list(){
-    linked_list.start = NULL;
-    linked_list.end = NULL;
-}
-
-void linked_list_remove_first() {
-    if (linked_list.start != NULL) {
-        struct Node* alter_start = linked_list.start;
-        linked_list.start = alter_start->next;
-
-        free(alter_start);
-    }
-}
-
 void allocate_page(const int req_page, const int g_count) {//?? muss pt aktualiesieren und neue page in vmem laden
     pf_count++;
     int frame = find_unused_frame();//VOID_IDX wird returned fall kein unused frame da
@@ -555,28 +511,32 @@ static void find_remove_clock(int page, int * removedPage, int *frame){
     inc_frame_counter();
 }
 
-static void find_remove_aging(int page, int * removedPage, int *frame) {   
-    // nach ältestem frame suchen 
+static void find_remove_aging(int page, int * removedPage, int *frame) {
+    printf("\n");
+    // nach ältestem frame suchen
+    update_age_reset_ref();
     uint8_t smallest_count = 0xFF;
     for (int i = 0; i < VMEM_NFRAMES; i++) {
+        printf("vorher: frame %d age counter\t %d \n", i, age[i].age);
         if (age[i].age <= smallest_count) {
             smallest_count = age[i].age;
             *frame = i;
         }
     }
     *removedPage = age[*frame].page;
-
-    //printf("smallest count %d, *frame %d, *removedPage %d\n", smallest_count, *frame, *removedPage);
+    printf("smallest count %d, *frame %d, *removedPage %d\n", smallest_count, *frame, *removedPage);
 
     if (vmem->pt[*removedPage].flags & PTF_DIRTY) {
         store_page_to_pagefile(*removedPage, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
     }
+ //   if (pf_count == 20)
+//        while (true) {}
     fetch_page_from_pagefile(page, &vmem->mainMemory[*frame * VMEM_PAGESIZE]);
 }
 
-static void update_age_reset_ref(void){
+static void update_age_reset_ref(void) {
     for (int i = 0; i < VMEM_NFRAMES; i++) {
-        //printf("age counter %d \n", age[i].age);
+        //printf("vorher: frame %d age counter\t %d \n", i, age[i].age);
         unsigned char new_age = (age[i].age >> 1);
         if (age[i].page == VOID_IDX) {
             break;
@@ -587,8 +547,8 @@ static void update_age_reset_ref(void){
             new_age |= (0x01 << 7);
         }
         age[i].age = new_age;
-        //printf("age counter\t %d \n", age[i].age);
+        //printf("frame %d age counter\t %d \n", i, age[i].age);
     }
-} 
+}
 
 // EOF
