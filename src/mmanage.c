@@ -578,7 +578,7 @@ static void update_age_reset_ref(void){
     for (int i = 0; i < VMEM_NFRAMES; i++) {
         //printf("age counter %d \n", age[i].age);
         unsigned char new_age = (age[i].age >> 1);
-        if (testpage == VOID_IDX) {
+        if (age[i].page == VOID_IDX) {
             break;
         }
         
